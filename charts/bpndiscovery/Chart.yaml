@@ -32,3 +32,9 @@ dependencies:
     name: postgresql
     version: 12.2.3
     condition: enablePostgres
+  # HashiCorp Vault
+  - name: vault
+    alias: vault
+    version: 0.20.0
+    repository: https://helm.releases.hashicorp.com
+    condition: install.vault

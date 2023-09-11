@@ -46,7 +46,7 @@ public class RegisterService {
       this.discoveryFinderClientService = discoveryFinderClientService;
    }
 
-   @Scheduled( cron = "${bpndiscovery.scheduler}" )
+//   @Scheduled( cron = "${bpndiscovery.scheduler}" )
    public void registerAfterStartup() {
       bpnDiscoveryProperties.getAllowedTypes().forEach( type -> {
          try {

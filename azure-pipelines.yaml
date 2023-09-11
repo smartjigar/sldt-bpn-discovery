@@ -1,0 +1,101 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+    - 'charts/*'
+    - 'docs/*'
+
+pr: none
+
+variables:
+  - group: ATP-dashboard-container-registry
+  - name: IMAGE_NAME
+    value: 'atp-dashboard-backend'
+  - name: IMAGE_TAG_KEY
+    value: 'tag: '
+
+pool: 'atp-dashboard-build-agent'
+
+stages:
+  - stage: Build
+    displayName: Build Container Image
+    jobs:
+      - job: Build
+        steps:
+          - checkout: self
+            persistCredentials: true
+            clean: true
+          - bash: |
+              docker login $(CONTAINER_REGISTRY) -u $(REGISTRY_USERNAME) -p $(REGISTRY_PASSWORD)
+            displayName: Configure Docker Login
+          - bash: |
+              echo "##vso[task.setvariable variable=containerImageName;isOutput=true]$(CONTAINER_REGISTRY)/$(IMAGE_NAME):$(Build.BuildNumber)"
+            name: containerImageVar
+          - bash: |
+              docker build -t $(containerImageVar.containerImageName) .
+            displayName: Build Image
+          - bash: |
+              docker push $(containerImageVar.containerImageName)
+            displayName: Push Docker Image
+          - bash: |
+              git config user.email "azure-pipeline@basf.com"
+              git config user.name "Azure Pipelines"
+              git tag $(Build.BuildNumber) `git log | grep -o '\w\{8,\}' | head -n 1`
+              git push origin $(Build.BuildNumber)
+            displayName: Create Tag & Push
+  - stage: deploy_on_dev
+    jobs:
+      - deployment: Deploy
+        displayName: Update container image tag on DEV
+        environment: 'ATP-dashboard-dev'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  persistCredentials: true
+                  clean: true
+                - bash: |
+                    git config user.email "azure-pipeline@basf.com"
+                    git config user.name "Azure Pipelines"
+                    git fetch --all
+                    git reset --hard origin/main
+                - bash: |
+                    cd  charts/atp-dashboard-backend
+                    sed -i 's/tag: .*/tag: "$(Build.BuildNumber)"/' values-dev.yaml
+                  displayName: Update image tag in dev values file
+                - bash: |
+                    git status
+                    git add .
+                    git commit -m "Update container image tag on dev ."
+                    git push origin HEAD:main
+                  displayName: Commit & Push Helm dev values file
+  - stage: deploy_on_prod
+    jobs:
+      - deployment: Deploy
+        displayName: Update container image tag on PROD
+        environment: 'ATP-dashboard-prod'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                  persistCredentials: true
+                  clean: true
+                - bash: |
+                    git config user.email "azure-pipeline@basf.com"
+                    git config user.name "Azure Pipelines"
+                    git fetch --all
+                    git reset --hard origin/main
+                - bash: |
+                    cd  charts/atp-dashboard-backend
+                    sed -i 's/tag: .*/tag: "$(Build.BuildNumber)"/' values-prod.yaml
+                  displayName: Update image tag in PROD values file
+                - bash: |
+                    git status
+                    git add .
+                    git commit -m "Update container image tag on PROD ."
+                    git push origin HEAD:main
+                  displayName: Commit & Push Helm PROD values file
